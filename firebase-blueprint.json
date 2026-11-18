@@ -1,0 +1,109 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated ZIVORA user profile and default delivery address.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID of the user." },
+        "displayName": { "type": "string", "description": "User display name." },
+        "email": { "type": "string", "description": "User email address." },
+        "defaultAddress": { "type": "string", "description": "Primary saved address for rides and deliveries." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp when created." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp when updated." }
+      },
+      "required": ["userId", "displayName", "email", "defaultAddress", "createdAt", "updatedAt"]
+    },
+    "SavedAddress": {
+      "title": "SavedAddress",
+      "description": "User-saved delivery or pickup address.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "label": { "type": "string", "description": "Short label such as Home or Work." },
+        "fullAddress": { "type": "string", "description": "Street and locality address." },
+        "landmark": { "type": "string", "description": "Optional nearby landmark." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp when created." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp when updated." }
+      },
+      "required": ["userId", "label", "fullAddress", "createdAt", "updatedAt"]
+    },
+    "RideBooking": {
+      "title": "RideBooking",
+      "description": "Active or past ride/logistics booking on ZIVORA (Bike booking disabled).",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "vehicleType": {
+          "type": "string",
+          "enum": ["CAR", "TAXI", "AUTO", "E_RICKSHAW", "PICKUP", "LOADER"],
+          "description": "Active vehicle type (BIKE is disabled)."
+        },
+        "pickupLocation": { "type": "string", "description": "Pickup location name." },
+        "dropLocation": { "type": "string", "description": "Drop-off location name." },
+        "distanceKm": { "type": "number", "description": "Estimated trip distance in km." },
+        "fareAmount": { "type": "number", "description": "Total estimated fare." },
+        "paymentMethod": { "type": "string", "enum": ["ZIVORA_PAY", "UPI", "CASH", "CARD"] },
+        "driverName": { "type": "string", "description": "Assigned driver name." },
+        "vehicleNumber": { "type": "string", "description": "Assigned vehicle license plate." },
+        "otpCode": { "type": "string", "description": "4-digit ride verification PIN." },
+        "status": {
+          "type": "string",
+          "enum": ["CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]
+        },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp when created." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp when updated." }
+      },
+      "required": [
+        "userId", "vehicleType", "pickupLocation", "dropLocation",
+        "distanceKm", "fareAmount", "paymentMethod", "driverName",
+        "vehicleNumber", "otpCode", "status", "createdAt", "updatedAt"
+      ]
+    },
+    "ServiceOrder": {
+      "title": "ServiceOrder",
+      "description": "Grocery delivery or food ordering order on ZIVORA.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "orderType": { "type": "string", "enum": ["GROCERY", "FOOD"] },
+        "storeName": { "type": "string", "description": "Grocery store or restaurant name." },
+        "itemsSummary": { "type": "string", "description": "Summary of ordered items and quantities." },
+        "itemCount": { "type": "integer", "description": "Total item count." },
+        "totalAmount": { "type": "number", "description": "Grand total order amount." },
+        "deliveryAddress": { "type": "string", "description": "Delivery destination address." },
+        "deliverySlot": { "type": "string", "description": "Delivery speed or time window." },
+        "paymentMethod": { "type": "string", "enum": ["ZIVORA_PAY", "UPI", "CASH", "CARD"] },
+        "status": {
+          "type": "string",
+          "enum": ["PLACED", "PREPARING", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"]
+        },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp when created." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp when updated." }
+      },
+      "required": [
+        "userId", "orderType", "storeName", "itemsSummary", "itemCount",
+        "totalAmount", "deliveryAddress", "deliverySlot", "paymentMethod",
+        "status", "createdAt", "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profile document scoped to the authenticated user."
+    },
+    "/users/{userId}/addresses/{addressId}": {
+      "schema": { "$ref": "#/entities/SavedAddress" },
+      "description": "User's saved delivery and pickup addresses."
+    },
+    "/users/{userId}/rideBookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/RideBooking" },
+      "description": "User's ride and logistics bookings (Car, Taxi, Auto, E-Rickshaw, Pickup, Loader)."
+    },
+    "/users/{userId}/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/ServiceOrder" },
+      "description": "User's grocery delivery and food ordering history."
+    }
+  }
+}

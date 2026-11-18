@@ -1,0 +1,218 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Hardened Primitives ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    // --- Entity Validation Helpers ---
+    function isValidUserProfile(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+             data.email is string && data.email.size() <= 120 &&
+             data.defaultAddress is string && data.defaultAddress.size() >= 1 && data.defaultAddress.size() <= 200;
+    }
+
+    function isValidSavedAddress(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.label is string && data.label.size() >= 1 && data.label.size() <= 30 &&
+             data.fullAddress is string && data.fullAddress.size() >= 3 && data.fullAddress.size() <= 200 &&
+             (!('landmark' in data) || (data.landmark is string && data.landmark.size() <= 100));
+    }
+
+    function isValidVehicleType(vehicleType) {
+      return vehicleType in ['CAR', 'TAXI', 'AUTO', 'E_RICKSHAW', 'PICKUP', 'LOADER'];
+    }
+
+    function isValidPaymentMethod(method) {
+      return method in ['ZIVORA_PAY', 'UPI', 'CASH', 'CARD'];
+    }
+
+    function isValidRideStatus(status) {
+      return status in ['CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
+    }
+
+    function isValidRideTransition(oldStatus, newStatus) {
+      return (oldStatus == 'CONFIRMED' && (newStatus == 'IN_PROGRESS' || newStatus == 'CANCELLED')) ||
+             (oldStatus == 'IN_PROGRESS' && (newStatus == 'COMPLETED' || newStatus == 'CANCELLED'));
+    }
+
+    function isValidRideBooking(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             isValidVehicleType(data.vehicleType) &&
+             data.pickupLocation is string && data.pickupLocation.size() >= 2 && data.pickupLocation.size() <= 150 &&
+             data.dropLocation is string && data.dropLocation.size() >= 2 && data.dropLocation.size() <= 150 &&
+             data.distanceKm is number && data.distanceKm > 0 && data.distanceKm <= 500 &&
+             data.fareAmount is number && data.fareAmount > 0 && data.fareAmount <= 50000 &&
+             isValidPaymentMethod(data.paymentMethod) &&
+             data.driverName is string && data.driverName.size() >= 2 && data.driverName.size() <= 80 &&
+             data.vehicleNumber is string && data.vehicleNumber.size() >= 3 && data.vehicleNumber.size() <= 30 &&
+             data.otpCode is string && data.otpCode.size() >= 4 && data.otpCode.size() <= 6 &&
+             isValidRideStatus(data.status);
+    }
+
+    function isValidOrderType(orderType) {
+      return orderType in ['GROCERY', 'FOOD'];
+    }
+
+    function isValidOrderStatus(status) {
+      return status in ['PLACED', 'PREPARING', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'];
+    }
+
+    function isValidOrderTransition(oldStatus, newStatus) {
+      return (oldStatus == 'PLACED' && (newStatus == 'PREPARING' || newStatus == 'CANCELLED')) ||
+             (oldStatus == 'PREPARING' && (newStatus == 'OUT_FOR_DELIVERY' || newStatus == 'CANCELLED')) ||
+             (oldStatus == 'OUT_FOR_DELIVERY' && newStatus == 'DELIVERED');
+    }
+
+    function isValidServiceOrder(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             isValidOrderType(data.orderType) &&
+             data.storeName is string && data.storeName.size() >= 2 && data.storeName.size() <= 100 &&
+             data.itemsSummary is string && data.itemsSummary.size() >= 2 && data.itemsSummary.size() <= 500 &&
+             data.itemCount is int && data.itemCount >= 1 && data.itemCount <= 100 &&
+             data.totalAmount is number && data.totalAmount > 0 && data.totalAmount <= 100000 &&
+             data.deliveryAddress is string && data.deliveryAddress.size() >= 3 && data.deliveryAddress.size() <= 200 &&
+             data.deliverySlot is string && data.deliverySlot.size() >= 2 && data.deliverySlot.size() <= 60 &&
+             isValidPaymentMethod(data.paymentMethod) &&
+             isValidOrderStatus(data.status);
+    }
+
+    // --- Collection Rules ---
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+
+      allow create: if isOwner(userId) && isValidId(userId) &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'email', 'defaultAddress', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'email', 'defaultAddress', 'createdAt', 'updatedAt']) &&
+                       isValidTimestamp(incoming().createdAt) &&
+                       isValidTimestamp(incoming().updatedAt) &&
+                       isValidUserProfile(incoming(), userId);
+
+      allow update: if isOwner(userId) && isValidId(userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidTimestamp(incoming().updatedAt) &&
+                       isValidUserProfile(incoming(), userId) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'defaultAddress', 'updatedAt']);
+
+      allow delete: if false;
+
+      match /addresses/{addressId} {
+        allow get: if isOwner(userId) && isValidId(addressId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) && isValidId(addressId) &&
+                         incoming().keys().hasAll(['userId', 'label', 'fullAddress', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'label', 'fullAddress', 'landmark', 'createdAt', 'updatedAt']) &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidSavedAddress(incoming(), userId);
+
+        allow update: if isOwner(userId) && isValidId(addressId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidSavedAddress(incoming(), userId) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['label', 'fullAddress', 'landmark', 'updatedAt']);
+
+        allow delete: if isOwner(userId) && isValidId(addressId);
+      }
+
+      match /rideBookings/{bookingId} {
+        allow get: if isOwner(userId) && isValidId(bookingId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) && isValidId(bookingId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'vehicleType', 'pickupLocation', 'dropLocation',
+                           'distanceKm', 'fareAmount', 'paymentMethod', 'driverName',
+                           'vehicleNumber', 'otpCode', 'status', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'vehicleType', 'pickupLocation', 'dropLocation',
+                           'distanceKm', 'fareAmount', 'paymentMethod', 'driverName',
+                           'vehicleNumber', 'otpCode', 'status', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().status == 'CONFIRMED' &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidRideBooking(incoming(), userId);
+
+        allow update: if isOwner(userId) && isValidId(bookingId) &&
+                         existing().status != 'COMPLETED' &&
+                         existing().status != 'CANCELLED' &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidRideBooking(incoming(), userId) &&
+                         isValidRideTransition(existing().status, incoming().status) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+
+        allow delete: if false;
+      }
+
+      match /orders/{orderId} {
+        allow get: if isOwner(userId) && isValidId(orderId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) && isValidId(orderId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'orderType', 'storeName', 'itemsSummary', 'itemCount',
+                           'totalAmount', 'deliveryAddress', 'deliverySlot', 'paymentMethod',
+                           'status', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'orderType', 'storeName', 'itemsSummary', 'itemCount',
+                           'totalAmount', 'deliveryAddress', 'deliverySlot', 'paymentMethod',
+                           'status', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().status == 'PLACED' &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidServiceOrder(incoming(), userId);
+
+        allow update: if isOwner(userId) && isValidId(orderId) &&
+                         existing().status != 'DELIVERED' &&
+                         existing().status != 'CANCELLED' &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidServiceOrder(incoming(), userId) &&
+                         isValidOrderTransition(existing().status, incoming().status) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+
+        allow delete: if false;
+      }
+    }
+  }
+}

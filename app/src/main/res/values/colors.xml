@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="zivora_orange">#FFFF6B00</color>
+    <color name="zivora_orange_dark">#FFD95300</color>
+    <color name="zivora_warm_white">#FFFFFBF8</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>

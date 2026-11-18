@@ -1,0 +1,6 @@
+{
+  "name": "ZIVORA",
+  "description": "ZIVORA - Everything You Need, One App. All-in-one ride booking, grocery delivery, and food ordering platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
